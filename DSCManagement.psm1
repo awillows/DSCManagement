@@ -1,11 +1,4 @@
-﻿# Util function to check for Null values from SQL
-# https://msdn.microsoft.com/en-us/library/system.dbnull(v=vs.110).aspx
-
-function Is-SqlNull($value){
-  return [System.DBNull]::Value.Equals($value)
-}
-
-# Function to pull all tables containing DSC settings. Should be called from anywhere that a partial set may need to be build.
+﻿# Function to pull all tables containing DSC settings. Should be called from anywhere that a partial set may need to be build.
 
 function Get-DSCDBtables
 {
