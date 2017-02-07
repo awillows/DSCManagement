@@ -31,7 +31,7 @@ function New-DBTableFromResource
     [string]$PropBlock = ""
 
     $DscResObj = Get-DscResource $DscResName
-    $props = $DscResObj | select -ExpandProperty Properties
+    $props = $DscResObj | Select-Object -ExpandProperty Properties
 
     # Open a connection to SQL and create a 'System.Data.SqlClient.SqlCommand' object
   
