@@ -182,6 +182,7 @@ function Open-DSCSettings
         [string]$ResourceType
     )
     
+	# DSC Settings - Uses a PowerShell Form Object
     Add-type -AssemblyName System.Windows.Forms
 
     [System.Windows.Forms.Application]::EnableVisualStyles()
@@ -283,6 +284,8 @@ function Open-DSCSettings
 
     $InitialFormWindowState = $form1.WindowState
     $form1.add_Load($Form_StateCorrection_Load)
+	
+	# Display for the Form
     $form1.ShowDialog()
     
 }
