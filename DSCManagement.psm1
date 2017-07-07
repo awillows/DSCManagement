@@ -16,7 +16,8 @@ function New-DBTableFromResource
 {
    [CmdletBinding()]
     param (
-        [string]$DscResName
+        [string]$DscResName,
+        [object]$connection
         )
     
     # Extract the properties from the resource for table columns
@@ -28,7 +29,10 @@ function New-DBTableFromResource
 
     # Open a connection to SQL and create a 'System.Data.SqlClient.SqlCommand' object
   
-    $connection = Open-SqlConnection 
+    if(!$connection)
+    {
+        $connection = Open-SqlConnection
+    }
     $command = $connection.CreateCommand()
 
     # Define a name for the new table based on resource if all succeeded above
@@ -69,6 +73,15 @@ function New-DBTableFromResource
         # We have to do a bit of string manipulation here as the '[' causes unexpected behaviour in 
         # string comparisons. Just strip them off and wild card to handle arrays.
 
+        # SQL contains some keywords which cannot be used for columns. Update the array below in case 
+        # these are encountered. W
+
+        $SqlKeyWords = @('Key','Table','Index','Database')
+
+        # Check if $prop.Name is considered a keyword and change.
+        if($SqlKeyWords.Contains($prop.Name)){$prop.Name = $prop.Name+"Name"}
+
+        # Determine type and add to table definition
         switch -wildcard ($($prop.PropertyType).TrimStart('[').TrimEnd(']'))
         {
             "string*" 
@@ -101,13 +114,18 @@ function New-DBTableFromResource
     # Start the ConfigBlock which will be saved to the DSCResource Table in order to build MOFs
     $ConfigBlock = 'foreach($row in $' + $tablename + ') { ' + $DscResName + ' $row.CoreDescription {' + $PropBlock + '}}'
     
-  
+    # Fixup the Config Block so any reserved SQL keyword is stored correctly as it's DSC resource property name.
+    foreach($word in $SqlKeyWords)
+    {
+        $ConfigBlock = $ConfigBlock.Replace($word + "Name =",$word + '=')
+    }
+
+    # Update DSCResource metadata table
     $command.commandtext = "INSERT INTO DSCResources (ResourceName,ResourceModule,ConfigBlock) `
                             VALUES('{0}','{1}','{2}')" -f
                             $DscResName,$DscResObj.ModuleName,$ConfigBlock
 
     # Send Command
-
     $command.ExecuteNonQuery()
     
     # Clean up connection
