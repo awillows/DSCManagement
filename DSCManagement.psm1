@@ -207,7 +207,7 @@ function Open-DSCSettings
     $form1 = New-Object 'System.Windows.Forms.Form'
     $datagridview1 = New-Object 'System.Windows.Forms.DataGridView'
     $buttonOK = New-Object 'System.Windows.Forms.Button'
-    $buttonCancel = New-Object 'System.Windows.Forms.Button'
+    #$buttonCancel = New-Object 'System.Windows.Forms.Button'
     $InitialFormWindowState = New-Object 'System.Windows.Forms.FormWindowState'
     $DGVhasChanged = $false
     #$connStr = "Server=$Instance;Database=$Database;Integrated Security=True"
