@@ -1,12 +1,33 @@
-﻿# Function to pull all tables containing DSC settings. Should be called from anywhere that a partial set may need to be build.
+﻿# Creates the table required for DSC Resource metadata, probably not needed unless creating new DB.
 
-function Get-DSCDBtables
+function New-DBTableForDSCMetadata
 {
-    $conn = Open-SqlConnection
-    $selectcommand = $selectcommand = "SELECT TABLE_NAME AS Name FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE '%Entries'"
-    $dbtables = Initialize-Table -connection $conn -query $selectcommand
+    [CmdletBinding()]
+    param (
+        [object]$connection
+    )
 
-    return $dbtables
+    $command = $connection.CreateCommand()
+    
+    try
+    {
+        $command.commandtext = "CREATE TABLE [dbo].[DSCResources](
+                                [ResourceName] [varchar](max) NOT NULL,
+                                [ResourceModule] [varchar](max) NOT NULL,
+                                [ResourceModuleVersion] [varchar](max) NOT NULL,
+                                [ResourceType] [varchar](max) NOT NULL,
+                                [ConfigBlock] [varchar](max) NOT NULL
+                                ) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]"
+        $command.ExecuteNonQuery()
+    }
+    catch
+    {
+        # The database already exists, at this point we will bail. I may add another switch parameter to update in case 
+        # a resource is updated and another property is added.
+
+        Write-Host "$($_.Exception.Message)" -ForegroundColor White -BackgroundColor Red
+        return
+    }
 }
 
 # New-DBTableFromResource can be used to quickly create tables based on the properties of the DSC Resource.
@@ -24,7 +45,15 @@ function New-DBTableFromResource
     # TODO - This needs error handling, currently a bad resource name will lead to a table still being created.
     [string]$PropBlock = ""
 
-    $DscResObj = Get-DscResource $DscResName
+    if(($DscResObj = Get-DscResource $DscResName).Count -gt 1)
+    {
+        Write-Host "There appears to be more than one version of this resource present." -BackgroundColor Red
+        $DscResObj
+
+        $version = Read-Host "Please enter the version you wish to use: "
+        $DscResObj = $DscResObj | Where-Object {$_.Version -like $version}
+    }    
+
     $props = $DscResObj | Select-Object -ExpandProperty Properties
 
     # Open a connection to SQL and create a 'System.Data.SqlClient.SqlCommand' object
@@ -45,7 +74,7 @@ function New-DBTableFromResource
     {
         $command.commandtext = "CREATE TABLE [dbo].[$tablename](
                                 [CoreID] [int] IDENTITY(1,1) NOT NULL,
-                                   [CorePartialSet] [varchar](255) NOT NULL,
+                                [CorePlatform] [varchar](255) NOT NULL,
                                 [CoreDescription] [varchar](255) NOT NULL,
                                 PRIMARY KEY CLUSTERED 
                                 (
@@ -121,9 +150,9 @@ function New-DBTableFromResource
     }
 
     # Update DSCResource metadata table
-    $command.commandtext = "INSERT INTO DSCResources (ResourceName,ResourceModule,ConfigBlock) `
-                            VALUES('{0}','{1}','{2}')" -f
-                            $DscResName,$DscResObj.ModuleName,$ConfigBlock
+    $command.commandtext = "INSERT INTO DSCResources (ResourceName,ResourceModule,ResourceModuleVersion,ResourceType,ConfigBlock) `
+                            VALUES('{0}','{1}','{2}','{3}','{4}')" -f
+                            $DscResName,$DscResObj.ModuleName,$DscResObj.Version.ToString(),$DscResObj.ResourceType,$ConfigBlock
 
     # Send Command
     $command.ExecuteNonQuery()
@@ -278,7 +307,7 @@ function Open-DSCSettings
     $form1.MinimizeBox = $False
     $form1.Name = 'form1'
     $form1.StartPosition = 'CenterScreen'
-    $form1.Text = 'Form'
+    $form1.Text = $ResourceType + "Entries Table Data"
     $form1.add_Load($form1_Load)
 
     $datagridview1.Anchor = 'Top, Bottom, Left, Right'
@@ -308,30 +337,60 @@ function Open-DSCSettings
     
 }
 
+function Get-DscDBTables
+{
+
+    [CmdletBinding()]
+    param (
+        [object]$connection
+    )
+
+    $connection = Open-SqlConnection
+
+    $query = "SELECT Name FROM Sys.Tables WHERE Name LIKE '%Entries'"
+    $table = Initialize-Table -connection $connection -query $query
+
+    return $table
+}
+
+# Get DSCSettings from the database
+# TODO string comparisons are not great. Needs some variable work.
+
 function Get-DscSettings
 {
     [CmdletBinding()]
     param (
-        [string]$category
+        [string]$category,
+        [switch]$ListDBTables
     )
-
-    $dbtables = @{"Registry" = "RegistryEntries"; `
-                  "Audit" = "AuditPolicy"; `
-                  "Services" = "ServiceEntries"; `
-                  "ChangeLog" = "ChangeLog";
-                  "File" = "FileEntries";
-                  "WindowsFeatureSet" = "WindowsFeatureSetEntries"}
-
-    if(!$dbtables.Contains($category))
-    {
-        Write-Host "Unknown category, please use 'Registry | Services | Audit | File | WindowsFeatureSet | ChangeLog"
-        return
-    }
 
     $connection = Open-SqlConnection 
 
-    #Assign the query value and send
-    $query = "SELECT * FROM $($dbtables.$category)"
+    # Target table based on user input - DB standard for table names is '<DscRescoureName>Entries'
+
+    $requiredTable = $category + "Entries"
+
+    # Create an array of available tables
+
+    $dbTables = Get-DscDBTables -connection $connection
+
+    if($PSBoundParameters.ContainsKey("ListDBTables"))
+    {
+        Write-Output "`nThe following DSC Resources have entries in the database:"
+        $dbTables
+        return
+    }
+
+    if(!$dbtables.Name.Contains($requiredTable))
+    {
+        Write-Host "`nUnknown category, tables categories are available:`n"
+        $dbTables.Name.Replace('Entries','')
+        return
+    }
+
+    # A valid table has been requested, assign the query value and send
+
+    $query = "SELECT * FROM $requiredTable"
     $table = Initialize-Table -connection $connection -query $query
 
     # Troubleshooting
@@ -347,7 +406,7 @@ function Open-SqlConnection
 {
     [CmdletBinding()]
     param (
-        [string]$computername = "anwillx1",
+        [string]$computername = ".\sqlexpress",
         [string]$database = "DSC"
     )
 
@@ -377,11 +436,12 @@ function New-DscMOF
 {
     [CmdletBinding()]
     param (
-        [string]$PartialSet,
-        [string]$ComputerName = "localhost"
+        [string]$Platform,
+        [string]$ComputerName = "localhost",
+        [switch]$CreatePS1
         )
 
-        $dbtables = Get-DSCDBtables
+        $dbtables = Get-DscDBtables
 
         $connection = Open-SqlConnection 
 
@@ -389,7 +449,7 @@ function New-DscMOF
         {
             # TODO, currently allowing wildcard searches 
 
-            $query = "SELECT * FROM $($entry.Name) WHERE CorePartialSet LIKE '%$partialset%'"
+            $query = "SELECT * FROM $($entry.Name) WHERE CorePlatform LIKE '%$Platform%'"
             Set-Variable -Name $($entry.Name) -Value (Initialize-Table -connection $connection -query $query)
         }
 
@@ -412,7 +472,7 @@ function New-DscMOF
         {
             if($row.ResourceModule -notlike "PSDesiredStateConfiguration")
             {
-                $MyConf += "Import-DscResource -ModuleName $($row.ResourceModule)"
+                $MyConf += "Import-DscResource -ModuleName $($row.ResourceModule)" + " -ModuleVersion $($row.ResourceModuleVersion)"
             }
         }
 
@@ -439,6 +499,7 @@ function New-DscMOF
 
         try
         {
+            #$MyConfScript | Out-File .\Temp.ps1
             & $MyConfScript
         }
         catch [System.UnauthorizedAccessException]
@@ -455,11 +516,11 @@ function New-DscMOF
 }
 
 Export-ModuleMember -Function Get-DscSettings,`
-                              Add-DscChangeRecord,`
                               New-DscMOF,`
                               Initialize-Table,`
                               Open-SqlConnection,`
                               Close-SqlConnection, `
                               New-DBTableFromResource,`
-                              Get-DSCDBTables, `
-                              Open-DSCSettings
+                              Open-DSCSettings,`
+                              New-DBTableForDSCMetadata,`
+                              Get-DscDBTables
