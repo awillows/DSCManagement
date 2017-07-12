@@ -488,6 +488,8 @@ function New-ConfigBlocks
 
         # Create new array object if not already based on the bitmask value
 
+        # TODO Clean up past variables here!! - Duplicates cause issue
+
         if(!(Test-Path Variable:\$($tablePrefix + $dataid)))
         {
             New-Variable -Name ($tablePrefix + $dataid) -Value @() -Scope Global
