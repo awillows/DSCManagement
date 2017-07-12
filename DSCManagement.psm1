@@ -1,4 +1,9 @@
-﻿# Creates the table required for DSC Resource metadata, probably not needed unless creating new DB.
+﻿function Is-SqlNull($value)
+{ 
+    return [System.DBNull]::Value.Equals($value) 
+} 
+
+# Creates the table required for DSC Resource metadata, probably not needed unless creating new DB.
 
 function New-DBTableForDSCMetadata
 {
@@ -432,6 +437,108 @@ function Close-SqlConnection
     $connection.Close()
 }
 
+function New-ConfigBlocks
+{
+    [CmdletBinding()]
+    param (
+        [string]$dbTable,
+        [string]$ConfigBlock,
+        [string]$Platform
+    )
+
+    $connection = Open-SqlConnection 
+
+    $query = "SELECT * FROM $dbTable WHERE CorePlatform LIKE '%$Platform%'"
+    $TableEntries = Initialize-Table -connection $connection -query $query
+    if($TableEntries.Count -eq 0)
+    {
+        "#No records found for $dbTable"
+        return
+    }
+    # Extract the Table Columns so we can count anduse the names.
+
+    [System.Data.DataTable] $table = $TableEntries[0].Table
+
+    # Create an hash of column names to assign a bit value to each. We can then loop through with -band
+
+    $tablePrefix = "newDSC$dbTable"
+
+    # Create a hash table with column names to bits
+
+    $columnNames = @{}
+    for($i = 0;$i -lt $table.Columns.Count;$i++)
+    {
+        $columnNames.Add([Math]::Pow(2, $i),$table.Columns[$i].ColumnName)
+    }
+
+    # Build a bitmask of populated columns for each row.
+
+    foreach($row in $TableEntries)
+    {
+        
+        $dataid = 0
+        for($i = 0;$i -lt $table.Columns.Count;$i++)
+        {
+            if(!$row.IsNull($i))
+            {
+                # Need to build bitmask of populated columns
+                $dataid = $dataid + [Math]::Pow(2, $i)
+            }
+        }
+
+        # Create new array object if not already based on the bitmask value
+
+        if(!(Test-Path Variable:\$($tablePrefix + $dataid)))
+        {
+            New-Variable -Name ($tablePrefix + $dataid) -Value @() -Scope Global
+        }
+
+        (Get-Variable -Name ($tablePrefix + $dataid)).Value += $row
+    
+        # Display columns based on bitmask...
+
+        #Write-Output "`nID $($row.CoreID) Has the following polulated and in group $dataid :`n"
+        #$columnNames.Keys | Where-Object {$_ -band $dataid} | Foreach-Object {$columnNames.Get_Item($_)}
+
+    }
+
+    # We should now have all the values placed into new tables based on the columns used. Output a new $configblock
+
+    $configBlockArray = @()
+
+    foreach($collection in (Get-Variable -Name "newDSC$dbTable*"))
+    {
+        # Extract the bitmask from the name
+        $newBlock = $ConfigBlock
+        #$configBlock = 'foreach($row in $WindowsFeatureEntries) { WindowsFeature $row.CoreDescription {Name = $row.Name;Ensure = $row.Ensure;IncludeAllSubFeature = $row.IncludeAllSubFeature;LogPath = $row.LogPath;Source = $row.Source;}}'
+        #$configBlock = 'foreach($row in $LogEntries) { Log $row.CoreDescription {Message = $row.Message;}}'
+        # Ensure the new table is referenced.
+
+        $newBlock = $newBlock.Replace($dbTable,"$($collection.Name)")
+
+        # Extract the bitmask from the end of the table name
+
+        $bitmask = $collection.Name.Replace("$tablePrefix","")
+        $columnsToRemove = $columnNames.Keys | Where-Object {!($_ -band $bitmask)} | Foreach-Object {$columnNames.Get_Item($_)}
+        
+        # Loop around the values to remove. This is quite straightforward as the text pattern is fixed when we wrote to DB.
+
+        foreach($column in $columnsToRemove)
+        {
+            # We will need a special case here where a known keyword needs to be removed.
+            $newBlock = $newBlock.Replace("$column = " + '$row' + ".$column;","")
+        }
+
+        $configBlockArray += $newBlock
+    }
+
+    return $configBlockArray
+
+
+}
+
+
+
 function New-DscMOF
 {
     [CmdletBinding()]
@@ -482,7 +589,8 @@ function New-DscMOF
 
         foreach($row in $dscresources)
         {
-            $MyConf += $row.ConfigBlock
+            $dbTableName = "$($row.ResourceName)Entries"
+            $MyConf += New-ConfigBlocks -dbTable $dbTableName -ConfigBlock $row.ConfigBlock -Platform $Platform
         }
 
         # Close the statements and add the call, there may be a need to add parameters here.
@@ -499,8 +607,8 @@ function New-DscMOF
 
         try
         {
-            #$MyConfScript | Out-File .\Temp.ps1
-            & $MyConfScript
+            $MyConfScript | Out-File .\MyScript.ps1
+            & $MyConfScript -Verbose
         }
         catch [System.UnauthorizedAccessException]
         {
