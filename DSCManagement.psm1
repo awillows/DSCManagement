@@ -241,11 +241,11 @@ function Open-DSCSettings
     $form1 = New-Object 'System.Windows.Forms.Form'
     $datagridview1 = New-Object 'System.Windows.Forms.DataGridView'
     $buttonOK = New-Object 'System.Windows.Forms.Button'
-    # $buttonCancel = New-Object 'System.Windows.Forms.Button'
     $InitialFormWindowState = New-Object 'System.Windows.Forms.FormWindowState'
     $DGVhasChanged = $false
-    #$connStr = "Server=$Instance;Database=$Database;Integrated Security=True"
-    
+
+    # Load the form and populate with selected table data
+
     $form1_Load = {
         $connection = Open-SqlConnection
         $cmd = $connection.CreateCommand()
@@ -341,7 +341,7 @@ function Open-DSCSettings
     $form1.ShowDialog()
     
 }
-
+# Help function to obtain a list of tables currently present in the database (Exported)
 function Get-DscDBTables
 {
 
@@ -385,6 +385,8 @@ function Get-DscSettings
         $dbTables
         return
     }
+
+    # If a non-existent table has been specified then display what is available (drops the 'Entries' part of the table name)
 
     if(!$dbtables.Name.Contains($requiredTable))
     {
@@ -437,7 +439,30 @@ function Close-SqlConnection
     $connection.Close()
 }
 
-function New-ConfigBlocks
+# Function: Update-ConfigBlock
+#
+# This will take a base configuration block and remove the redundant entries based on the columns
+# used in the DataRow record. 
+#
+# For Example, for the record below..
+#
+#    Name                 : All
+#    Ensure               : 
+#    IncludeAllSubFeature : True
+#    LogPath              : C:\Logs
+#    Source               : 
+#
+# We will change this ConfigBlock:
+# 
+# {Name = $row.Name;Ensure = $row.Ensure;IncludeAllSubFeature = $row.IncludeAllSubFeature;LogPath = $row.LogPath;Source = $row.Source;}}
+#
+# To this:
+#
+# {Name = $row.Name;IncludeAllSubFeature = $row.IncludeAllSubFeature;LogPath = $row.LogPath;}}
+#
+# This ensures the unused columns of 'Ensure' and 'Source' are not referenced during COnfiguration script compile.
+#
+function Update-ConfigBlock
 {
     [CmdletBinding()]
     param (
@@ -446,24 +471,33 @@ function New-ConfigBlocks
         [string]$Platform
     )
 
-    $connection = Open-SqlConnection 
+    # Open a connection to the DB to return records and run the query.
 
+    $connection = Open-SqlConnection 
     $query = "SELECT * FROM $dbTable WHERE CorePlatform LIKE '%$Platform%'"
     $TableEntries = Initialize-Table -connection $connection -query $query
+
+    # No records found, as we've called this function to assign to a variable all output is returned
+    # See https://msdn.microsoft.com/powershell/reference/5.1/Microsoft.PowerShell.Core/about/about_Return 
+    # for more details on PowerShell returns. For now I place a # in front so it ends up as a comment in the
+    # Config Script.
+
     if($TableEntries.Count -eq 0)
     {
-        "#No records found for $dbTable"
+        Write-Output "#No records found for $dbTable"
         return
     }
-    # Extract the Table Columns so we can count anduse the names.
+
+    # We have data so extract the Table Columns so we can count the number and reference the names 
 
     [System.Data.DataTable] $table = $TableEntries[0].Table
 
-    # Create an hash of column names to assign a bit value to each. We can then loop through with -band
+    # prefix name for the variables used in the script. 
 
     $tablePrefix = "newDSC$dbTable"
 
-    # Create a hash table with column names to bits
+    # Create a hash table with column names to bits, this will be checked with the bitmask to determine those column names in use
+    # Raising 2 to the power of i$ (starting at 0) will provide the Keys as bit values.
 
     $columnNames = @{}
     for($i = 0;$i -lt $table.Columns.Count;$i++)
@@ -471,56 +505,47 @@ function New-ConfigBlocks
         $columnNames.Add([Math]::Pow(2, $i),$table.Columns[$i].ColumnName)
     }
 
-    # Build a bitmask of populated columns for each row.
+    # Check each column in the DataRow and build a bitmask representing those in use.
 
     foreach($row in $TableEntries)
     {
         
-        $dataid = 0
+        $bitMaskValue = 0
         for($i = 0;$i -lt $table.Columns.Count;$i++)
         {
             if(!$row.IsNull($i))
             {
                 # Need to build bitmask of populated columns
-                $dataid = $dataid + [Math]::Pow(2, $i)
+                $bitMaskValue = $bitMaskValue + [Math]::Pow(2, $i)
             }
         }
 
-        # Create new array object if not already based on the bitmask value
+        # Crearte a variable for each column 'in use' variation. Variables may already be present from previous run, if so 
+        # clear, if not create. Set-Variable can handle this in on call as it creates new when something isn't found.
 
-        # TODO Clean up past variables here!! - Duplicates cause issue
+        Set-Variable -Name ($tablePrefix + $bitMaskValue) -Value @() -Scope Global
 
-        if(!(Test-Path Variable:\$($tablePrefix + $dataid)))
-        {
-            New-Variable -Name ($tablePrefix + $dataid) -Value @() -Scope Global
-        }
+        # Add the row to the correct array based on columns in use.
 
-        (Get-Variable -Name ($tablePrefix + $dataid)).Value += $row
-    
-        # Display columns based on bitmask...
-
-        #Write-Output "`nID $($row.CoreID) Has the following polulated and in group $dataid :`n"
-        #$columnNames.Keys | Where-Object {$_ -band $dataid} | Foreach-Object {$columnNames.Get_Item($_)}
-
+        (Get-Variable -Name ($tablePrefix + $bitMaskValue)).Value += $row
     }
 
-    # We should now have all the values placed into new tables based on the columns used. Output a new $configblock
+    # We should now have all the values placed into new tables based on the columns used. Output a new $configblock to an array
+    # that will then be written to the in memory configuration script
 
     $configBlockArray = @()
 
-    foreach($collection in (Get-Variable -Name "newDSC$dbTable*"))
+    foreach($newVariable in (Get-Variable -Name "newDSC$dbTable*"))
     {
-        # Extract the bitmask from the name
+        # We need to assign the $ConfigBlock passed in to a new varaible to avoid clashes.
+        
         $newBlock = $ConfigBlock
-        #$configBlock = 'foreach($row in $WindowsFeatureEntries) { WindowsFeature $row.CoreDescription {Name = $row.Name;Ensure = $row.Ensure;IncludeAllSubFeature = $row.IncludeAllSubFeature;LogPath = $row.LogPath;Source = $row.Source;}}'
-        #$configBlock = 'foreach($row in $LogEntries) { Log $row.CoreDescription {Message = $row.Message;}}'
-        # Ensure the new table is referenced.
+        $newBlock = $newBlock.Replace($dbTable,"$($newVariable.Name)")
 
-        $newBlock = $newBlock.Replace($dbTable,"$($collection.Name)")
+        # Extract the bitmask from the end of the table name so we can use the value to evalate what needs to be removed from
+        # the configBlock string. The column names not in use will be added to 
 
-        # Extract the bitmask from the end of the table name
-
-        $bitmask = $collection.Name.Replace("$tablePrefix","")
+        $bitmask = $newVariable.Name.Replace("$tablePrefix","")
         $columnsToRemove = $columnNames.Keys | Where-Object {!($_ -band $bitmask)} | Foreach-Object {$columnNames.Get_Item($_)}
         
         # Loop around the values to remove. This is quite straightforward as the text pattern is fixed when we wrote to DB.
@@ -528,15 +553,19 @@ function New-ConfigBlocks
         foreach($column in $columnsToRemove)
         {
             # We will need a special case here where a known keyword needs to be removed.
+            # This string pattern is based on what is written into the DSCResources table
+
             $newBlock = $newBlock.Replace("$column = " + '$row' + ".$column;","")
         }
+
+        # Add the new block to the array and loop back around if needed.
 
         $configBlockArray += $newBlock
     }
 
+    # Return the strings for inclusion in the configuration script.
+
     return $configBlockArray
-
-
 }
 
 
@@ -592,7 +621,7 @@ function New-DscMOF
         foreach($row in $dscresources)
         {
             $dbTableName = "$($row.ResourceName)Entries"
-            $MyConf += New-ConfigBlocks -dbTable $dbTableName -ConfigBlock $row.ConfigBlock -Platform $Platform
+            $MyConf += Update-ConfigBlock -dbTable $dbTableName -ConfigBlock $row.ConfigBlock -Platform $Platform
         }
 
         # Close the statements and add the call, there may be a need to add parameters here.
