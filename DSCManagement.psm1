@@ -1,9 +1,4 @@
-﻿function Is-SqlNull($value)
-{ 
-    return [System.DBNull]::Value.Equals($value) 
-} 
-
-# Creates the table required for DSC Resource metadata, probably not needed unless creating new DB.
+﻿# Creates the table required for DSC Resource metadata, probably not needed unless creating new DB.
 
 function New-DBTableForDSCMetadata
 {
@@ -34,9 +29,11 @@ function New-DBTableForDSCMetadata
         return
     }
 }
-
+# Function: New-DBTableFromResource
+#
 # New-DBTableFromResource can be used to quickly create tables based on the properties of the DSC Resource.
 # Any further alterations can be made directly through SSMS. 
+
 
 function New-DBTableFromResource
 {
