@@ -228,8 +228,27 @@ function Open-DSCSettings
     param (
         [object]$connection,
         [parameter(mandatory)]
-        [string]$ResourceType
+        [string]$Resource
     )
+
+    $connection = Open-SqlConnection 
+
+    # Target table based on user input - DB standard for table names is '<DscRescoureName>Entries'
+
+    $requiredTable = $Resource + "Entries"
+
+    # Create an array of available tables
+
+    $dbTables = Get-DscDBTables -connection $connection
+
+    # If a non-existent table has been specified then display what is available (drops the 'Entries' part of the table name)
+
+    if(!$dbtables.Name.Contains($requiredTable))
+    {
+        Write-Host "`nUnknown resource, tables categories are available:`n"
+        $dbTables.Name.Replace('Entries','')
+        return
+    }
     
 	# DSC Settings - Uses a PowerShell Form Object
     Add-type -AssemblyName System.Windows.Forms
@@ -246,7 +265,7 @@ function Open-DSCSettings
     $form1_Load = {
         $connection = Open-SqlConnection
         $cmd = $connection.CreateCommand()
-        $cmd.CommandText = "SELECT * FROM $ResourceType" + "Entries"
+        $cmd.CommandText = "SELECT * FROM $Resource" + "Entries"
 
         $script:adapter = New-Object System.Data.SqlClient.SqlDataAdapter($cmd)
         $dt = New-Object System.Data.DataTable
@@ -362,7 +381,7 @@ function Get-DscSettings
 {
     [CmdletBinding()]
     param (
-        [string]$category,
+        [string]$Resource,
         [switch]$ListDBTables
     )
 
@@ -370,7 +389,7 @@ function Get-DscSettings
 
     # Target table based on user input - DB standard for table names is '<DscRescoureName>Entries'
 
-    $requiredTable = $category + "Entries"
+    $requiredTable = $Resource + "Entries"
 
     # Create an array of available tables
 
@@ -387,7 +406,7 @@ function Get-DscSettings
 
     if(!$dbtables.Name.Contains($requiredTable))
     {
-        Write-Host "`nUnknown category, tables categories are available:`n"
+        Write-Host "`nUnknown resource, tables categories are available:`n"
         $dbTables.Name.Replace('Entries','')
         return
     }
@@ -403,7 +422,6 @@ function Get-DscSettings
     Close-SQLConnection $connection
 
     return $table
-
 }
 
 function Open-SqlConnection
