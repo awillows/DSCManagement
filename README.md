@@ -31,39 +31,41 @@ Source               :
 
 This difference in property use can present issues when trying to build dynamic configuration as an attempt to read a property will fail for those with no value. The PowerShell DSC module addresses this by building configuration data based on the fields populated and grouping those usign the same properties for each resource. More details can be found under the `Update-ConfigBlock` description.
 
-### Function Overview
+### **Function Overview**
 
-Open-SqlConnection
+**Open-SqlConnection**
 
-Opens a connection (Needs work)
+Opens a SQL connection (Needs work)
 
-Close-SqlConnection
+**Close-SqlConnection**
 
-Get-DscDBTables
+Closes open connection
+
+**Get-DscDBTables**
 
 List the tables currently in the database
 
-Get-DscSettings
+**Get-DscSettings**
 
 Outputs all the configuration data stored for a particular resource.
 
-Initialize-Table
+**Initialize-Table**
 
 Reads tables into a `System.Data.DataRow` object.
 
-New-DBTableForDSCMetadata
+**New-DBTableForDSCMetadata**
 
 This builds the table for the storage of DSC Resource metadata (Resource Type, Module Version etc.) and a ConfigBlock string which acts as a template for reading in configuration settings.
 
-New-DBTableFromResource
+**New-DBTableFromResource**
 
 Extracts the properties from a DSC resource and creates a new table based on these for storing configuration.
 
-New-DscMOF
+**New-DscMOF**
 
 Outputs a new MOF based on a platform selected. 
 
-Open-DSCSettings
+**Open-DSCSettings**
 
 Windows Form for editing and viewing table data.
 
