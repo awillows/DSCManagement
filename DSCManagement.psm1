@@ -572,36 +572,25 @@ function New-DscMOF
     [CmdletBinding()]
     param (
         [string]$Platform,
-        [string]$ComputerName = "localhost",
-        [switch]$CreatePS1
+        [string]$ComputerName = "localhost"
         )
-
-        $dbtables = Get-DscDBtables
 
         $connection = Open-SqlConnection 
 
-        foreach($entry in $dbtables)
-        {
-            # TODO, currently allowing wildcard searches 
-
-            $query = "SELECT * FROM $($entry.Name) WHERE CorePlatform LIKE '%$Platform%'"
-            Set-Variable -Name $($entry.Name) -Value (Initialize-Table -connection $connection -query $query)
-        }
-
-        # We've built variables, now get the string for use in Config Script. For now add everything in the DB, this will be changed to only those resources we
-        # have entries for.
+        # DSC Resource metadata is stored in the DSCResources table.  Read all of the settings from here so we can look 
+        # to build configuration blocks
 
         $query = "SELECT * FROM DSCResources"
         $dscresources = Initialize-Table -connection $connection -query $query
         Close-SQLConnection -connection $connection
 
-        # Add strings for Config, we build an array of string that will make up the script.
+        # We will build an array of strings that will make up the script. This will then be executed once complete to produce the .MOF
 
         $MyConf = @()
         $MyConf += "Configuration MyStandards{"
         $MyConf += 'Import-DscResource -ModuleName PSDesiredStateConfiguration'
 
-        # Add other modules
+        # Add modules used, this will not be reflected in final MOF if no settings for a particular resource are required.
 
         foreach($row in $dscresources)
         {
@@ -611,9 +600,11 @@ function New-DscMOF
             }
         }
 
+        # Write the compunter name, defaults to localhost.
+
         $MyConf += "node $ComputerName{"
 
-        # Add the ConfigBlock for each resource
+        # Add the ConfigBlock for each resource, this needs to review what columns are in use and build some globals for reference.
 
         foreach($row in $dscresources)
         {
@@ -626,7 +617,7 @@ function New-DscMOF
         $MyConf += '}}'
         $MyConf += "MyStandards"
 
-        # Build the Config from the string array
+        # Build the Config from the string array and add some line breaks.
 
         $MyConfScript = ""
         $MyConf | ForEach-Object {$MyConfScript += $_.ToString() + "`n"}
@@ -635,7 +626,6 @@ function New-DscMOF
 
         try
         {
-            $MyConfScript | Out-File .\MyScript.ps1
             & $MyConfScript -Verbose
         }
         catch [System.UnauthorizedAccessException]
