@@ -35,19 +35,35 @@ This difference in property use can present issues when trying to build dynamic 
 
 Open-SqlConnection
 
+Opens a connection (Needs work)
+
 Close-SqlConnection
 
 Get-DscDBTables
 
+List the tables currently in the database
+
 Get-DscSettings
+
+Outputs all the configuration data stored for a particular resource.
 
 Initialize-Table
 
+Reads tables into a `System.Data.DataRow` object.
+
 New-DBTableForDSCMetadata
+
+This builds the table for the storage of DSC Resource metadata (Resource Type, Module Version etc.) and a ConfigBlock string which acts as a template for reading in configuration settings.
 
 New-DBTableFromResource
 
+Extracts the properties from a DSC resource and creates a new table based on these for storing configuration.
+
 New-DscMOF
 
+Outputs a new MOF based on a platform selected. 
+
 Open-DSCSettings
+
+Windows Form for editing and viewing table data.
 
