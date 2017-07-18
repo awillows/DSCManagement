@@ -490,7 +490,7 @@ function Update-ConfigBlock
 
     $connection = Open-SqlConnection 
     $query = "SELECT * FROM $dbTable WHERE CorePlatform LIKE '%$Platform%'"
-    $TableEntries = Initialize-Table -connection $connection -query $query
+    $TableEntries = @(Initialize-Table -connection $connection -query $query)
 
     # No records found, as we've called this function to assign to a variable all output is returned
     # See https://msdn.microsoft.com/powershell/reference/5.1/Microsoft.PowerShell.Core/about/about_Return 
@@ -536,9 +536,14 @@ function Update-ConfigBlock
         }
 
         # Crearte a variable for each column 'in use' variation. Variables may already be present from previous run, if so 
-        # clear, if not create. Set-Variable can handle this in on call as it creates new when something isn't found.
+        # clear, if not create. 
 
-        Set-Variable -Name ($tablePrefix + $bitMaskValue) -Value @() -Scope Global
+        # TODO clean up variables
+
+        if(!(Test-Path Variable:\$($tablePrefix + $bitMaskValue)))
+        {
+            New-Variable -Name ($tablePrefix + $bitMaskValue) -Value @() -Scope Global
+        }
 
         # Add the row to the correct array based on columns in use.
 
