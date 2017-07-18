@@ -1,4 +1,11 @@
-﻿# Creates the table required for DSC Resource metadata, probably not needed unless creating new DB.
+﻿# Cleans up the global variables used to store rows. Called from New-DscMOF after success or fail.
+
+function Remove-Artefacts
+{
+    Get-Variable "newDSC*" | Remove-Variable -Scope Global
+}
+
+# Creates the table required for DSC Resource metadata, probably not needed unless creating new DB.
 
 function New-DBTableForDSCMetadata
 {
@@ -33,7 +40,6 @@ function New-DBTableForDSCMetadata
 #
 # New-DBTableFromResource can be used to quickly create tables based on the properties of the DSC Resource.
 # Any further alterations can be made directly through SSMS. 
-
 
 function New-DBTableFromResource
 {
@@ -595,7 +601,8 @@ function New-DscMOF
     [CmdletBinding()]
     param (
         [string]$Platform,
-        [string]$ComputerName = "localhost"
+        [string]$ComputerName = "localhost",
+        [string]$ConfigName = "MySettings"
         )
 
         $connection = Open-SqlConnection 
@@ -610,7 +617,7 @@ function New-DscMOF
         # We will build an array of strings that will make up the script. This will then be executed once complete to produce the .MOF
 
         $MyConf = @()
-        $MyConf += "Configuration MyStandards{"
+        $MyConf += "Configuration MySettings{"
         $MyConf += 'Import-DscResource -ModuleName PSDesiredStateConfiguration'
 
         # Add modules used, this will not be reflected in final MOF if no settings for a particular resource are required.
@@ -638,7 +645,7 @@ function New-DscMOF
         # Close the statements and add the call, there may be a need to add parameters here.
 
         $MyConf += '}}'
-        $MyConf += "MyStandards"
+        $MyConf += "MySettings"
 
         # Build the Config from the string array and add some line breaks.
 
@@ -655,13 +662,20 @@ function New-DscMOF
         {
             Write-Host "$($_.Exception.Message)" -ForegroundColor White -BackgroundColor Red
             Write-Host "Please ensure you are running with Administrator privileges" -ForegroundColor White -BackgroundColor Red
+            Remove-Artefacts
             return
         }
         catch
         {
             Write-Host "$($_.Exception.Message)" -ForegroundColor White -BackgroundColor Red
+            Remove-Artefacts
             return
         }
+
+        # Clean up variables to avoid issues on subsequent runs
+
+        Remove-Artefacts   
+    
 }
 
 Export-ModuleMember -Function Get-DscSettings,`
