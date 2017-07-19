@@ -249,7 +249,7 @@ function Open-DSCSettings
 
     # If a non-existent table has been specified then display what is available (drops the 'Entries' part of the table name)
 
-    if(!$dbtables.Name.Contains($requiredTable))
+    if(!$dbtables.Name.ToUpper().Contains($requiredTable.ToUpper()))
     {
         Write-Host "`nUnknown resource, tables categories are available:`n"
         $dbTables.Name.Replace('Entries','')
@@ -410,7 +410,7 @@ function Get-DscSettings
 
     # If a non-existent table has been specified then display what is available (drops the 'Entries' part of the table name)
 
-    if(!$dbtables.Name.Contains($requiredTable))
+    if(!$dbtables.Name.ToUpper().Contains($requiredTable.ToUpper()))
     {
         Write-Host "`nUnknown resource, tables categories are available:`n"
         $dbTables.Name.Replace('Entries','')
