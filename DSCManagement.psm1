@@ -1,4 +1,49 @@
-﻿# Cleans up the global variables used to store rows. Called from New-DscMOF after success or fail.
+﻿function Update-ConfigBlockData
+{
+    param(
+        [string]$ConfigBlock,
+        [string]$Resource
+        )
+
+    $connection = Open-SqlConnection 
+    $command = $connection.CreateCommand()
+    
+    $command.commandtext = "UPDATE [dbo].[DSCResources]
+                            SET    [ConfigBlock] = '{0}'
+                            WHERE  [ResourceName] = '{1}';" -f $ConfigBlock,$Resource
+    $command.ExecuteNonQuery()
+
+    return
+}
+
+function Add-DscMultiValueColumn
+{
+    param(
+        [string]$Resource,
+        [string]$Property
+    )
+
+    $connection = Open-SqlConnection 
+    $query = "SELECT * FROM DSCResources  WHERE ResourceName LIKE '$Resource'"
+    $dscresource = Initialize-Table -connection $connection -query $query
+
+    # Bit of a catch all, if the resource isn't in the DB or the property is invlaid it will fail.
+
+    if(!($dscresource.ConfigBlock -like "*$Property;*"))
+    {
+        Write-Output "Cannot locate $Property in ConfigBlock for Resource $Resource"
+        Write-Output "This is what was found:`n"
+        $dscresource.ConfigBlock
+        return
+    }
+    else
+    {
+        $newConfigBlock = $dscresource.ConfigBlock.Replace("$Property;","$Property.Split(`",`");")
+        Update-ConfigBlockData -ConfigBlock $newConfigBlock -Resource $dscresource.ResourceName
+    }
+}
+
+# Cleans up the global variables used to store rows. Called from New-DscMOF after success or fail.
 
 function Remove-Artefacts
 {
@@ -686,4 +731,5 @@ Export-ModuleMember -Function Get-DscSettings,`
                               New-DBTableFromResource,`
                               Open-DSCSettings,`
                               New-DBTableForDSCMetadata,`
-                              Get-DscDBTables
+                              Get-DscDBTables, `
+                              Add-DscMultiValueColumn
