@@ -44,13 +44,6 @@ function Add-DscMultiValueColumn
     }
 }
 
-# Cleans up the global variables used to store rows. Called from New-DscMOF after success or fail.
-
-function Remove-Artefacts
-{
-    Get-Variable "newDSC*" | Remove-Variable -Scope Global
-}
-
 # Creates the table required for DSC Resource metadata, probably not needed unless creating new DB.
 
 function New-DBTableForDSCMetadata
@@ -91,131 +84,150 @@ function New-DBTableFromResource
 {
    [CmdletBinding()]
     param (
-        [string]$DscResName,
+        [parameter(ValueFromPipeline=$True)]
+        [string[]]$DscResName,
         [object]$connection
         )
-    
-    # Extract the properties from the resource for table columns
-    # TODO - This needs error handling, currently a bad resource name will lead to a table still being created.
-    [string]$PropBlock = ""
 
-    if(($DscResObj = Get-DscResource $DscResName).Count -gt 1)
+    Begin
     {
-        Write-Host "There appears to be more than one version of this resource present." -BackgroundColor Red
-        $DscResObj
-
-        $version = Read-Host "Please enter the version you wish to use: "
-        $DscResObj = $DscResObj | Where-Object {$_.Version -like $version}
-    }    
-
-    $props = $DscResObj | Select-Object -ExpandProperty Properties
-
-    # Open a connection to SQL and create a 'System.Data.SqlClient.SqlCommand' object
-  
-    if(!$connection)
-    {
-        $connection = Open-SqlConnection
-    }
-    $command = $connection.CreateCommand()
-
-    # Define a name for the new table based on resource if all succeeded above
-
-    $tablename = $DscResName + "Entries"
-
-    # Create the table with default columns of ID (primary key), partialset this will apply to and a identifier for MOF generation. This names are prefixed to avoid conflicts.
-
-    try
-    {
-        $command.commandtext = "CREATE TABLE [dbo].[$tablename](
-                                [CoreID] [int] IDENTITY(1,1) NOT NULL,
-                                [CorePlatform] [varchar](255) NOT NULL,
-                                [CoreDescription] [varchar](255) NOT NULL,
-                                PRIMARY KEY CLUSTERED 
-                                (
-                                   [CoreID] ASC
-                                )WITH (PAD_INDEX = OFF, `
-                                STATISTICS_NORECOMPUTE = OFF, `
-                                IGNORE_DUP_KEY = OFF, `
-                                ALLOW_ROW_LOCKS = ON, `
-                                ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
-                                ) ON [PRIMARY]"
-        $command.ExecuteNonQuery()
-    }
-    catch
-    {
-        # The database already exists, at this point we will bail. I may add another switch parameter to update in case 
-        # a resource is updated and another property is added.
-
-        Write-Host "$($_.Exception.Message)" -ForegroundColor White -BackgroundColor Red
-        return
+        Write-Verbose "Adding Table(s)..."
     }
 
-    # Now add the columns, loop through the properties returned
-    foreach($prop in $props)
+    Process
     {
-        # We have to do a bit of string manipulation here as the '[' causes unexpected behaviour in 
-        # string comparisons. Just strip them off and wild card to handle arrays.
+        # Extract the properties from the resource for table columns
+        # TODO - This needs error handling, currently a bad resource name will lead to a table still being created.
+        [string]$PropBlock = ""
 
-        # SQL contains some keywords which cannot be used for columns. Update the array below in case 
-        # these are encountered. W
-
-        $SqlKeyWords = @('Key','Table','Index','Database')
-
-        # Check if $prop.Name is considered a keyword and change.
-        if($SqlKeyWords.Contains($prop.Name)){$prop.Name = $prop.Name+"Name"}
-
-        # Determine type and add to table definition
-        switch -wildcard ($($prop.PropertyType).TrimStart('[').TrimEnd(']'))
-        {
-            "string*" 
+        try {
+            if(($DscResObj = Get-DscResource $DscResName).Count -gt 1)
             {
-                if($prop.Name -notlike "DependsOn")
+            Write-Host "There appears to be more than one version of this resource present." -BackgroundColor Red
+            $DscResObj
+
+            $version = Read-Host "Please enter the version you wish to use: "
+            $DscResObj = $DscResObj | Where-Object {$_.Version -like $version}
+            }    
+        }
+        catch 
+        {
+            Write-Output "Problem locating resource named $DscResName"
+            return
+        }       
+
+        $props = $DscResObj | Select-Object -ExpandProperty Properties
+
+        # Open a connection to SQL and create a 'System.Data.SqlClient.SqlCommand' object
+    
+        if(!$connection)
+        {
+            $connection = Open-SqlConnection
+        }
+        $command = $connection.CreateCommand()
+
+        # Define a name for the new table based on resource if all succeeded above
+
+        $tablename = $DscResObj.Name + "Entries"
+
+        # Create the table with default columns of ID (primary key), partialset this will apply to and a identifier for MOF generation. This names are prefixed to avoid conflicts.
+
+        try
+        {
+            $command.commandtext = "CREATE TABLE [dbo].[$tablename](
+                                    [CoreID] [int] IDENTITY(1,1) NOT NULL,
+                                    [CorePlatform] [varchar](255) NOT NULL,
+                                    [CoreDescription] [varchar](255) NOT NULL,
+                                    PRIMARY KEY CLUSTERED 
+                                    (
+                                    [CoreID] ASC
+                                    )WITH (PAD_INDEX = OFF, `
+                                    STATISTICS_NORECOMPUTE = OFF, `
+                                    IGNORE_DUP_KEY = OFF, `
+                                    ALLOW_ROW_LOCKS = ON, `
+                                    ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+                                    ) ON [PRIMARY]"
+            $command.ExecuteNonQuery() | Out-Null
+            Write-Host "Table $tablename created"
+        }
+        catch
+        {
+            # The database already exists, at this point we will bail. I may add another switch parameter to update in case 
+            # a resource is updated and another property is added.
+
+            Write-Host "$($_.Exception.Message)" -ForegroundColor White -BackgroundColor Red
+            return
+        }
+
+        # Now add the columns, loop through the properties returned
+        foreach($prop in $props)
+        {
+            # We have to do a bit of string manipulation here as the '[' causes unexpected behaviour in 
+            # string comparisons. Just strip them off and wild card to handle arrays.
+
+            # SQL contains some keywords which cannot be used for columns. Update the array below in case 
+            # these are encountered. W
+
+            $SqlKeyWords = @('Key','Table','Index','Database')
+
+            # Check if $prop.Name is considered a keyword and change.
+            if($SqlKeyWords.Contains($prop.Name)){$prop.Name = $prop.Name+"Name"}
+
+            # Determine type and add to table definition
+            switch -wildcard ($($prop.PropertyType).TrimStart('[').TrimEnd(']'))
+            {
+                "string*" 
+                {
+                    if($prop.Name -notlike "DependsOn")
+                    {
+                        $command.commandtext = "ALTER TABLE $tablename `
+                                    ADD $($prop.Name) [varchar](max)"
+                        $command.ExecuteNonQuery() | Out-Null
+                        $PropBlock += $prop.Name + ' = ' + '$row.' + $prop.Name + ';'
+                    }
+                }
+                "bool"
                 {
                     $command.commandtext = "ALTER TABLE $tablename `
-                                ADD $($prop.Name) [varchar](max)"
-                    $command.ExecuteNonQuery()
+                                ADD $($prop.Name) [bit]"
+                    $command.ExecuteNonQuery() | Out-Null
+                    $PropBlock += $prop.Name + ' = ' + '$row.' + $prop.Name + ';'
+                }
+                "UInt32*"
+                {
+                    $command.commandtext = "ALTER TABLE $tablename `
+                                ADD $($prop.Name) [int]"
+                    $command.ExecuteNonQuery() | Out-Null
                     $PropBlock += $prop.Name + ' = ' + '$row.' + $prop.Name + ';'
                 }
             }
-            "bool"
-            {
-                $command.commandtext = "ALTER TABLE $tablename `
-                            ADD $($prop.Name) [bit]"
-                $command.ExecuteNonQuery()
-                $PropBlock += $prop.Name + ' = ' + '$row.' + $prop.Name + ';'
-            }
-            "UInt32*"
-            {
-                $command.commandtext = "ALTER TABLE $tablename `
-                            ADD $($prop.Name) [int]"
-                $command.ExecuteNonQuery()
-                $PropBlock += $prop.Name + ' = ' + '$row.' + $prop.Name + ';'
-            }
-         }
-    }
+        }
 
-    # Start the ConfigBlock which will be saved to the DSCResource Table in order to build MOFs
-    $ConfigBlock = 'foreach($row in $' + $tablename + ') { ' + $DscResName + ' $row.CoreDescription {' + $PropBlock + '}}'
-    
-    # Fixup the Config Block so any reserved SQL keyword is stored correctly as it's DSC resource property name.
-    foreach($word in $SqlKeyWords)
+        # Start the ConfigBlock which will be saved to the DSCResource Table in order to build MOFs
+        $ConfigBlock = 'foreach($row in $' + $tablename + ') { ' + $DscResObj.Name + ' $row.CoreDescription {' + $PropBlock + '}}'
+        
+        # Fixup the Config Block so any reserved SQL keyword is stored correctly as it's DSC resource property name.
+        foreach($word in $SqlKeyWords)
+        {
+            $ConfigBlock = $ConfigBlock.Replace($word + "Name =",$word + ' =')
+        }
+
+        # Update DSCResource metadata table
+        $command.commandtext = "INSERT INTO DSCResources (ResourceName,ResourceModule,ResourceModuleVersion,ResourceType,ConfigBlock) `
+                                VALUES('{0}','{1}','{2}','{3}','{4}')" -f
+                                $DscResObj.Name,$DscResObj.ModuleName,$DscResObj.Version.ToString(),$DscResObj.ResourceType,$ConfigBlock
+
+        # Send Command
+        $command.ExecuteNonQuery() | Out-Null
+    }
+    End
     {
-        $ConfigBlock = $ConfigBlock.Replace($word + "Name =",$word + ' =')
+        # Clean up connection
+        Close-SQLConnection -connection $connection
     }
-
-    # Update DSCResource metadata table
-    $command.commandtext = "INSERT INTO DSCResources (ResourceName,ResourceModule,ResourceModuleVersion,ResourceType,ConfigBlock) `
-                            VALUES('{0}','{1}','{2}','{3}','{4}')" -f
-                            $DscResName,$DscResObj.ModuleName,$DscResObj.Version.ToString(),$DscResObj.ResourceType,$ConfigBlock
-
-    # Send Command
-    $command.ExecuteNonQuery()
-    
-    # Clean up connection
-    Close-SQLConnection -connection $connection
 } 
 
-# Initialize-Table is a help function that sends the SELECT query to the SQL server and populates a DataTable
+# Initialize-Table is a helper function that sends the SELECT query to the SQL server and populates a DataTable
 
 function Initialize-Table
 {
@@ -551,7 +563,7 @@ function Update-ConfigBlock
 
     if($TableEntries.Count -eq 0)
     {
-        Write-Output "#No records found for $dbTable"
+        Write-Output "# No records found for $dbTable with Platform of $Platform"
         return
     }
 
@@ -587,14 +599,12 @@ function Update-ConfigBlock
             }
         }
 
-        # Crearte a variable for each column 'in use' variation. Variables may already be present from previous run, if so 
-        # clear, if not create. 
-
-        # TODO clean up variables
+        # Create a variable for each column 'in use' variation. Script scope used to clean up after but make available to caller.
+        # As we are looping through this we will create once then check for existing.
 
         if(!(Test-Path Variable:\$($tablePrefix + $bitMaskValue)))
         {
-            New-Variable -Name ($tablePrefix + $bitMaskValue) -Value @() -Scope Global
+            New-Variable -Name ($tablePrefix + $bitMaskValue) -Value @() -Scope Script
         }
 
         # Add the row to the correct array based on columns in use.
@@ -622,12 +632,24 @@ function Update-ConfigBlock
         
         # Loop around the values to remove. This is quite straightforward as the text pattern is fixed when we wrote to DB.
 
+        $SqlKeyWords = @('Key','Table','Index','Database')
+
         foreach($column in $columnsToRemove)
         {
-            # We will need a special case here where a known keyword needs to be removed.
+            # We will need a special case here where a known keyword needs to be removed as we create the column as property + Name
             # This string pattern is based on what is written into the DSCResources table
 
-            $newBlock = $newBlock.Replace("$column = " + '$row' + ".$column;","")
+            # Create a new variable to check is this name was previously from a SQL keyword
+            $keyWordCheck = $column.Replace('Name','')
+
+            if($SqlKeyWords.Contains($keyWordCheck))
+            {
+                $newBlock = $newBlock.Replace("$keyWordCheck = " + '$row' + ".$column;","")
+            }
+            else 
+            {
+                $newBlock = $newBlock.Replace("$column = " + '$row' + ".$column;","")
+            }
         }
 
         # Add the new block to the array and loop back around if needed.
@@ -640,7 +662,7 @@ function Update-ConfigBlock
     return $configBlockArray
 }
 
-
+# Create a new MOF file from data stored in SQL, we build a configuration file in-memory and then run it.
 
 function New-DscMOF
 {
@@ -648,7 +670,8 @@ function New-DscMOF
     param (
         [string]$Platform,
         [string]$ComputerName = "localhost",
-        [string]$ConfigName = "MySettings"
+        [string]$ConfigName = "MySettings",
+        [switch]$DebugConfig # Displays in memory config for troubleshooting
         )
 
         $connection = Open-SqlConnection 
@@ -701,28 +724,26 @@ function New-DscMOF
         $MyConfScript = $ExecutionContext.InvokeCommand.NewScriptBlock($MyConfScript)
 
         try
-        {            
-            Write-Host $MyConfScript
+        {   
+            if($PSBoundParameters.ContainsKey('DebugConfig'))
+            {
+                Write-Output "Dumping Config Script for review...`n"
+                Write-Host $MyConfScript
+            }        
+            
             & $MyConfScript -Verbose
         }
         catch [System.UnauthorizedAccessException]
         {
             Write-Host "$($_.Exception.Message)" -ForegroundColor White -BackgroundColor Red
             Write-Host "Please ensure you are running with Administrator privileges" -ForegroundColor White -BackgroundColor Red
-            Remove-Artefacts
             return
         }
         catch
         {
             Write-Host "$($_.Exception.Message)" -ForegroundColor White -BackgroundColor Red
-            Remove-Artefacts
             return
         }
-
-        # Clean up variables to avoid issues on subsequent runs
-
-        Remove-Artefacts   
-    
 }
 
 Export-ModuleMember -Function Get-DscSettings,`
