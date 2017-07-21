@@ -20,7 +20,8 @@ function Add-DscMultiValueColumn
 {
     param(
         [string]$Resource,
-        [string]$Property
+        [string]$Property,
+        [string]$Deliminator = ","
     )
 
     $connection = Open-SqlConnection 
@@ -38,7 +39,7 @@ function Add-DscMultiValueColumn
     }
     else
     {
-        $newConfigBlock = $dscresource.ConfigBlock.Replace("$Property;","$Property.Split(`",`");")
+        $newConfigBlock = $dscresource.ConfigBlock.Replace("$Property;","$Property -Split `"$Deliminator`";")
         Update-ConfigBlockData -ConfigBlock $newConfigBlock -Resource $dscresource.ResourceName
     }
 }
@@ -700,7 +701,8 @@ function New-DscMOF
         $MyConfScript = $ExecutionContext.InvokeCommand.NewScriptBlock($MyConfScript)
 
         try
-        {
+        {            
+            Write-Host $MyConfScript
             & $MyConfScript -Verbose
         }
         catch [System.UnauthorizedAccessException]
