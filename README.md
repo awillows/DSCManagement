@@ -82,11 +82,7 @@ ScriptEntries
 
 Outputs all the configuration data stored for a particular resource.
 
-**Initialize-Table**
-
-Reads tables into a `System.Data.DataRow` object.
-
-This is the main helper function for all calls to read from SQL. It returns a `System.Data.DataTable` object which allows manipulation of the results via the standard PowerShell pipeline.
+Objects returned are of type `System.Data.DataRow` allowing for pipeline operations.
 
 ```powershell
 PS C:\> Get-DscSettings -Resource Log | Where-Object {$PSItem.Message -eq 'Hello'}
@@ -95,6 +91,10 @@ CoreID CorePlatform CoreDescription Message
 ------ ------------ --------------- -------
      4 BaseOS          Team Message    Hello
 ```
+
+**Initialize-Table**
+
+This is the main helper function for all calls to read from SQL. It returns a `System.Data.DataTable` object which allows manipulation of the results via the standard PowerShell pipeline.
 
 **New-DBTableForDSCMetadata**
 
@@ -123,7 +123,6 @@ There is currently an issue with DSC Resources that have no module name. For exa
 ```powershell
 PS C:\> Get-DscResource -Name File | fl
 
-
 ResourceType  : MSFT_FileDirectoryConfiguration
 Name          : File
 FriendlyName  : File
@@ -141,6 +140,22 @@ This appears to be an isolated case but it should be fixed.
 **New-DBTableFromResource**
 
 Extracts the properties from a DSC resource and creates a new table based on these for storing configuration.
+
+The column types created will be based on the property types extracts. We currently support:
+
+DSC Property Type | SQL Property Type
+------------------|------------------
+bool              | bit
+string            | varchar(max)
+UInt32            | int
+
+If required the `switch` statement can be extended to support new types.
+
+This function does accept pipeline input so an array of DSC Resources names can be passed in to create multiple tables in one batch. 
+
+Following the creation of a new table the DSCResources table is populated with the correct module details and a configuration block for use in `New-DscMOF`.
+
+There is an outstanding piece of work to ensure mandatory resource properties are stored in columns that cannot be NULL.
 
 **New-DscMOF**
 
