@@ -688,9 +688,12 @@ function New-DscMOF
         $MyConf += "Configuration MySettings{"
         $MyConf += 'Import-DscResource -ModuleName PSDesiredStateConfiguration'
 
-        # Add modules used, this will not be reflected in final MOF if no settings for a particular resource are required.
+        # Add modules used, this will not be reflected in final MOF if no settings for a particular resource are required. There
+        # are a lot of duplicates so we want to clean these up
 
-        foreach($row in $dscresources)
+        $dscmodules = $dscresources | Select-Object ResourceModule,ResourceModuleVersion -Unique
+
+        foreach($row in $dscmodules)
         {
             if($row.ResourceModule -notlike "PSDesiredStateConfiguration")
             {
