@@ -231,3 +231,19 @@ if(!$row.IsNull($i))
 
 The result will be multiple arrays of Datarows that all share a common set of populated properties.
 
+### Sample DSC Configuration Script created in memory
+
+```powershell
+Configuration MySettings {
+Import-DscResource -ModuleName PSDesiredStateConfiguration -ModuleVersion 1.1
+Import-DscResource -ModuleName cUserRights -ModuleVersion 1.0.0.1
+Import-DscResource -ModuleName xPSDesiredStateConfiguration -ModuleVersion 3.12.0.1
+node localhost {
+# No records found for RegistryEntries with Platform of BaseOS
+foreach($row in $newDSCLogEntries15) { Log $row.CoreDescription {Message = $row.Message;}}
+# No records found for cUserRightsEntries with Platform of BaseOS
+foreach($row in $newDSCWindowsFeatureEntries15) { WindowsFeature $row.CoreDescription {Name = $row.Name;}}
+# No records found for xRegistryEntries with Platform of BaseOS
+}}
+MySettings
+```
