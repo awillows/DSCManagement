@@ -81,21 +81,61 @@ This builds the table for the storage of DSC Resource metadata (Resource Type, M
 
 Extracts the properties from a DSC resource and creates a new table based on these for storing configuration.
 
+We reference the values in this table for the creation of the configuration script `New-DscMOF` builds.
+
+We currently store the properties below:
+
+```powershell
+PS C:\WINDOWS\system32> $TableEntries | gm -MemberType Properties
+
+   TypeName: System.Data.DataRow
+
+Name                  MemberType Definition
+----                  ---------- ----------
+ConfigBlock           Property   string ConfigBlock {get;set;}
+ResourceModule        Property   string ResourceModule {get;set;}
+ResourceModuleVersion Property   string ResourceModuleVersion {get;set;}
+ResourceName          Property   string ResourceName {get;set;}
+ResourceType          Property   string ResourceType {get;set;}   
+```
+
+There is currently an issue with DSC Resources that have no module name. For example the inbox File resource:
+
+```powershell
+PS C:\WINDOWS\system32> Get-DscResource -Name File | fl
+
+
+ResourceType  : MSFT_FileDirectoryConfiguration
+Name          : File
+FriendlyName  : File
+Module        :
+ModuleName    :
+Version       :
+Path          :
+ParentPath    : C:\WINDOWS\system32\Configuration\Schema\MSFT_FileDirectoryConfiguration
+ImplementedAs : Binary
+CompanyName   :
+Properties    : {DestinationPath, Attributes, Checksum, Contents...}
+```
+This appears to be an isolated case but it should be fixed.
+
 **New-DscMOF**
 
 Outputs a new MOF based on a platform selected. 
 
-By referencing the values stored in the DSCResources a configuration script is built dynamically and then executed. There is a DebugConfig switch available if you would like to view the script as this can be useful for troubleshooting.
+By referencing the values stored in the DSCResources table a configuration script is built dynamically and then executed. There is a `-DebugConfig` switch available if you would like to view the script as this can be useful for troubleshooting.
 
 The function makes a call to `Update-ConfigBlock` to ensure we don't hit issues with empty properties being read by the configuration script.
 
 If no records are found for a speicfied platform we will dump the in-memory script for review. 
 
-NOTE: The `-Platform` is wildcarded before being sent to SQL. This should be taken into account as creating similar platform names could lead to unexpected results. For example, if using `BaseOS` and `BaseOSv2`, searching for `BaseOS` will return both. This can be avoided by Full-Text indexing the tables and amending the query to perform a CONTAINS().
+NOTE:
+
+> The `-Platform` parameter value is wildcarded before being sent to SQL. This should be taken into account as creating similar platform names could lead to unexpected results. For example, if using `BaseOS` and `BaseOSv2`, searching for `BaseOS` will return both. This can be avoided by Full-Text indexing the tables and amending the query to perform a CONTAINS().
 
 **Open-DSCSettings**
 
-Windows Form for editing and viewing table data.
+This prosents a Windows Form for editing and viewing table data. This is still very much work in progress but it provides basic functionality to add/delete and query records.
 
 **Update-ConfigBlock**
 
@@ -124,7 +164,7 @@ To this:
 {Name = $row.Name;IncludeAllSubFeature = $row.IncludeAllSubFeature;LogPath = $row.LogPath;}}
 ```
 
-This ensures the unused columns of 'Ensure' and 'Source' are not referenced during configuration script compile.
+This ensures the unused columns of `Ensure`and `Source` are not referenced during configuration script compile.
 
 In order to identify those properties to be removed we create a hash table of all properties and an associated bit value.
 
