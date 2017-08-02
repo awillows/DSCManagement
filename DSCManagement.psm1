@@ -743,9 +743,6 @@ function New-DscMOF
             Write-Host "$($_.Exception.Message)" -ForegroundColor White -BackgroundColor Red
             return
         }
-
-        # Clean up the variable. This appears to remain
-        #Remove-Variable -Name "newDSC*" -Scope Script
 }
 
 Export-ModuleMember -Function Get-DscSettings,`
