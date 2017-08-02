@@ -43,7 +43,27 @@ Closes open connection
 
 **Get-DscDBTables**
 
-List the tables currently in the database. 
+List the tables currently in the database. In it's current form it will just query `sys.tables` for a list of tables in DB. 
+
+~~~
+PS C:\> Get-DscDBTables
+
+Name
+----
+ArchiveEntries
+cUserRightsEntries
+Entries
+EnvironmentEntries
+FileEntries
+GroupEntries
+GroupSetEntries
+LogEntries
+PackageEntries
+ProcessSetEntries
+RegistryEntries
+ScriptEntries
+...
+~~~
 
 **Get-DscSettings**
 
@@ -65,9 +85,13 @@ Extracts the properties from a DSC resource and creates a new table based on the
 
 Outputs a new MOF based on a platform selected. 
 
-By refernencing the values stored in the DSCResources a configuration script is built dynamically and then executed. There is a DebugConfig switch available if you would like to view the script as this can be useful for troubleshooting.
+By referencing the values stored in the DSCResources a configuration script is built dynamically and then executed. There is a DebugConfig switch available if you would like to view the script as this can be useful for troubleshooting.
 
 The function makes a call to `Update-ConfigBlock` to ensure we don't hit issues with empty properties being read by the configuration script.
+
+If no records are found for a speicfied platform we will dump the in-memory script for review. 
+
+NOTE: The `-Platform` is wildcarded before being sent to SQL. This should be taken into account as creating similar platform names could lead to unexpected results. For example, if using `BaseOS` and `BaseOSv2`, searching for `BaseOS` will return both. This can be avoided by Full-Text indexing the tables and amending the query to perform a CONTAINS().
 
 **Open-DSCSettings**
 
@@ -90,11 +114,15 @@ For Example, for the record below:
 
 We will change this ConfigBlock:
 
-`{Name = $row.Name;Ensure = $row.Ensure;IncludeAllSubFeature = $row.IncludeAllSubFeature;LogPath = $row.LogPath;Source = $row.Source;}}`
+```powershell
+{Name = $row.Name;Ensure = $row.Ensure;IncludeAllSubFeature = $row.IncludeAllSubFeature;LogPath = $row.LogPath;Source = $row.Source;}}
+```
 
 To this:
 
-`{Name = $row.Name;IncludeAllSubFeature = $row.IncludeAllSubFeature;LogPath = $row.LogPath;}}`
+```powershell
+{Name = $row.Name;IncludeAllSubFeature = $row.IncludeAllSubFeature;LogPath = $row.LogPath;}}
+```
 
 This ensures the unused columns of 'Ensure' and 'Source' are not referenced during configuration script compile.
 
@@ -115,12 +143,13 @@ Name                           Value
 
 Once we've created this hashtable we can then the loop through the records and build a bitmask that will map empty properties. These records will then be added to a new table.
 
-~~~
+```powershell
 if(!$row.IsNull($i))
 {
     # Need to build bitmask of populated columns
     $bitMaskValue = $bitMaskValue + [Math]::Pow(2, $i)
 }
-~~~
+```
 
 The result will be multiple arrays of Datarows that all share a common set of populated properties.
+

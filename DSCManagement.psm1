@@ -584,7 +584,7 @@ function Update-ConfigBlock
     }
 
     # Check each column in the DataRow and build a bitmask representing those in use.
-    $TableEntries.Count 
+
     foreach($row in $TableEntries)
     {
         
@@ -685,8 +685,7 @@ function New-DscMOF
         # We will build an array of strings that will make up the script. This will then be executed once complete to produce the .MOF
 
         $MyConf = @()
-        $MyConf += "Configuration MySettings{"
-        $MyConf += 'Import-DscResource -ModuleName PSDesiredStateConfiguration'
+        $MyConf += "Configuration MySettings {"
 
         # Add modules used, this will not be reflected in final MOF if no settings for a particular resource are required. There
         # are a lot of duplicates so we want to clean these up
@@ -695,15 +694,12 @@ function New-DscMOF
 
         foreach($row in $dscmodules)
         {
-            if($row.ResourceModule -notlike "PSDesiredStateConfiguration")
-            {
-                $MyConf += "Import-DscResource -ModuleName $($row.ResourceModule)" + " -ModuleVersion $($row.ResourceModuleVersion)"
-            }
+            $MyConf += "Import-DscResource -ModuleName $($row.ResourceModule)" + " -ModuleVersion $($row.ResourceModuleVersion)"
         }
 
         # Write the compunter name, defaults to localhost.
 
-        $MyConf += "node $ComputerName{"
+        $MyConf += "node $ComputerName {"
 
         # Add the ConfigBlock for each resource, this needs to review what columns are in use and build some globals for reference.
 
@@ -723,7 +719,18 @@ function New-DscMOF
         $MyConfScript = ""
         $MyConf | ForEach-Object {$MyConfScript += $_.ToString() + "`n"}
 
+
+
         $MyConfScript = $ExecutionContext.InvokeCommand.NewScriptBlock($MyConfScript)
+
+        # Check whether any variables were created, if not then assume no records and dump the script.
+
+        if(!(Get-Variable -Name "newDSc*"))
+        {
+            Write-Host "No records found, please check the script below (possible platform typo?):`n"
+            Write-Host $MyConfScript
+            return
+        }
 
         try
         {   
