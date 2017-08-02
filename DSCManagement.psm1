@@ -549,7 +549,6 @@ function Update-ConfigBlock
         [string]$ConfigBlock,
         [string]$Platform
     )
-
     # Open a connection to the DB to return records and run the query.
 
     $connection = Open-SqlConnection 
@@ -585,7 +584,7 @@ function Update-ConfigBlock
     }
 
     # Check each column in the DataRow and build a bitmask representing those in use.
-
+    $TableEntries.Count 
     foreach($row in $TableEntries)
     {
         
@@ -604,7 +603,7 @@ function Update-ConfigBlock
 
         if(!(Test-Path Variable:\$($tablePrefix + $bitMaskValue)))
         {
-            New-Variable -Name ($tablePrefix + $bitMaskValue) -Value @() -Scope Script
+            New-Variable -Name ($tablePrefix + $bitMaskValue) -Value @() -Scope 1
         }
 
         # Add the row to the correct array based on columns in use.
@@ -744,6 +743,9 @@ function New-DscMOF
             Write-Host "$($_.Exception.Message)" -ForegroundColor White -BackgroundColor Red
             return
         }
+
+        # Clean up the variable. This appears to remain
+        #Remove-Variable -Name "newDSC*" -Scope Script
 }
 
 Export-ModuleMember -Function Get-DscSettings,`
