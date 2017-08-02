@@ -35,11 +35,24 @@ This difference in property use can present issues when trying to build dynamic 
 
 **Open-SqlConnection**
 
-Opens a SQL connection (Needs work)
+Opens a SQL connection.
+
+This is called from many functions but it's use is inconsistent. It does contain defaults which will need to be changed to refelct environment specifics.
+
+```powershell
+    [CmdletBinding()]
+    param (
+        [string]$computername = ".\sqlexpress",
+        [string]$database = "DSC"
+    )
+```
+This needs more work to improve it's use.
 
 **Close-SqlConnection**
 
-Closes open connection
+Closes open connection. 
+
+Yep, thats all...
 
 **Get-DscDBTables**
 
@@ -73,20 +86,26 @@ Outputs all the configuration data stored for a particular resource.
 
 Reads tables into a `System.Data.DataRow` object.
 
+This is the main helper function for all calls to read from SQL. It returns a `System.Data.DataTable` object which allows manipulation of the results via the standard PowerShell pipeline.
+
+```powershell
+PS C:\> Get-DscSettings -Resource Log | Where-Object {$PSItem.Message -eq 'Hello'}
+
+CoreID CorePlatform CoreDescription Message
+------ ------------ --------------- -------
+     4 BaseOS          Team Message    Hello
+```
+
 **New-DBTableForDSCMetadata**
 
 This builds the table for the storage of DSC Resource metadata (Resource Type, Module Version etc.) and a ConfigBlock string which acts as a template for reading in configuration settings.
-
-**New-DBTableFromResource**
-
-Extracts the properties from a DSC resource and creates a new table based on these for storing configuration.
 
 We reference the values in this table for the creation of the configuration script `New-DscMOF` builds.
 
 We currently store the properties below:
 
 ```powershell
-PS C:\WINDOWS\system32> $TableEntries | gm -MemberType Properties
+PS C:\> $TableEntries | gm -MemberType Properties
 
    TypeName: System.Data.DataRow
 
@@ -102,7 +121,7 @@ ResourceType          Property   string ResourceType {get;set;}
 There is currently an issue with DSC Resources that have no module name. For example the inbox File resource:
 
 ```powershell
-PS C:\WINDOWS\system32> Get-DscResource -Name File | fl
+PS C:\> Get-DscResource -Name File | fl
 
 
 ResourceType  : MSFT_FileDirectoryConfiguration
@@ -118,6 +137,10 @@ CompanyName   :
 Properties    : {DestinationPath, Attributes, Checksum, Contents...}
 ```
 This appears to be an isolated case but it should be fixed.
+
+**New-DBTableFromResource**
+
+Extracts the properties from a DSC resource and creates a new table based on these for storing configuration.
 
 **New-DscMOF**
 

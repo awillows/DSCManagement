@@ -249,7 +249,7 @@ function Initialize-Table
 
     # Save the results to a table to return to the caller
 
-    $table = new-object “System.Data.DataTable”
+    $table = new-object "System.Data.DataTable"
     $table.Load($results)
     
     # Troubleshooting - this will be removed at some point but was intended to verify data being returned.
