@@ -212,6 +212,19 @@ function New-DBTableFromResource
             $ConfigBlock = $ConfigBlock.Replace($word + "Name =",$word + ' =')
         }
 
+        # Temporary fix!!! - The file resource as of writing has no ModuleName or Version. Set these to default in box module
+        # This is ugly and needs to be handled better...
+
+        if($DscResObj.Name -eq 'File')
+        {
+            $command.commandtext = "INSERT INTO DSCResources (ResourceName,ResourceModule,ResourceModuleVersion,ResourceType,ConfigBlock) `
+                                VALUES('{0}','{1}','{2}','{3}','{4}')" -f
+                                $DscResObj.Name,'PSDesiredStateConfiguration','1.1',$DscResObj.ResourceType,$ConfigBlock
+            $command.ExecuteNonQuery() | Out-Null
+            Close-SQLConnection -connection $connection
+            return
+        }
+
         # Update DSCResource metadata table
         $command.commandtext = "INSERT INTO DSCResources (ResourceName,ResourceModule,ResourceModuleVersion,ResourceType,ConfigBlock) `
                                 VALUES('{0}','{1}','{2}','{3}','{4}')" -f
