@@ -560,12 +560,13 @@ function Update-ConfigBlock
     param (
         [string]$dbTable,
         [string]$ConfigBlock,
-        [string]$Platform
+        [string]$Platform,
+        [string]$BasePlatform
     )
     # Open a connection to the DB to return records and run the query.
 
     $connection = Open-SqlConnection 
-    $query = "SELECT * FROM $dbTable WHERE CorePlatform LIKE '%$Platform%'"
+    $query = "SELECT * FROM $dbTable WHERE CorePlatform LIKE '%$Platform%' OR CorePlatform LIKE '$BasePlatform'"
     $TableEntries = @(Initialize-Table -connection $connection -query $query)
 
     # No records found, as we've called this function to assign to a variable all output is returned
@@ -683,6 +684,7 @@ function New-DscMOF
         [string]$Platform,
         [string]$ComputerName = "localhost",
         [string]$ConfigName = "MySettings",
+        [string]$BasePlatform = "BaseOS",
         [switch]$DebugConfig # Displays in memory config for troubleshooting
         )
 
@@ -719,7 +721,7 @@ function New-DscMOF
         foreach($row in $dscresources)
         {
             $dbTableName = "$($row.ResourceName)Entries"
-            $MyConf += Update-ConfigBlock -dbTable $dbTableName -ConfigBlock $row.ConfigBlock -Platform $Platform
+            $MyConf += Update-ConfigBlock -dbTable $dbTableName -ConfigBlock $row.ConfigBlock -Platform $Platform -BasePlatform $BasePlatform
         }
 
         # Close the statements and add the call, there may be a need to add parameters here.
