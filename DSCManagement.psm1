@@ -700,7 +700,7 @@ function New-DscMOF
         # We will build an array of strings that will make up the script. This will then be executed once complete to produce the .MOF
 
         $MyConf = @()
-        $MyConf += "Configuration MySettings {"
+        $MyConf += "Configuration $ConfigName {"
 
         # Add modules used, this will not be reflected in final MOF if no settings for a particular resource are required. There
         # are a lot of duplicates so we want to clean these up
@@ -727,7 +727,7 @@ function New-DscMOF
         # Close the statements and add the call, there may be a need to add parameters here.
 
         $MyConf += '}}'
-        $MyConf += "MySettings"
+        $MyConf += "$ConfigName"
 
         # Build the Config from the string array and add some line breaks.
 
