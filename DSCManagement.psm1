@@ -88,7 +88,7 @@ function New-DBTableFromResource
         [string[]]$DscResName,
         [object]$connection
         )
-
+    # Taking from the pipeline
     Begin
     {
         Write-Verbose "Adding Table(s)..."
