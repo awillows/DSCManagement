@@ -1,52 +1,76 @@
-﻿function Update-ConfigBlockData
-{
-    param(
-        [string]$ConfigBlock,
-        [string]$Resource
-        )
+﻿#Requires -Version 5.1
 
-    $connection = Open-SqlConnection 
-    $command = $connection.CreateCommand()
-    
-    $command.commandtext = "UPDATE [dbo].[DSCResources]
-                            SET    [ConfigBlock] = '{0}'
-                            WHERE  [ResourceName] = '{1}';" -f $ConfigBlock,$Resource
-    $command.ExecuteNonQuery()
+<#
+.SYNOPSIS
+    DSCManagement - A comprehensive PowerShell DSC settings management solution backed by SQL Server.
 
-    return
-}
+.DESCRIPTION
+    This module provides a robust framework for managing PowerShell DSC (Desired State Configuration)
+    settings using SQL Server as a backend database. It enables centralized configuration management,
+    dynamic MOF generation, and provides both programmatic and GUI interfaces for managing DSC settings.
 
-function Add-DscMultiValueColumn
-{
-    param(
-        [string]$Resource,
-        [string]$Property,
-        [string]$Deliminator = ","
-    )
+.NOTES
+    Author: awillows
+    Version: 2.0.0
+    Copyright: (c) 2025 awillows. All rights reserved.
+    License: MIT License
+#>
 
-    $connection = Open-SqlConnection 
-    $query = "SELECT * FROM DSCResources  WHERE ResourceName LIKE '$Resource'"
-    $dscresource = Initialize-Table -connection $connection -query $query
+# Get the module root path
+$ModuleRoot = $PSScriptRoot
 
-    # Bit of a catch all, if the resource isn't in the DB or the property is invlaid it will fail.
-
-    if(!($dscresource.ConfigBlock -like "*$Property;*"))
-    {
-        Write-Output "Cannot locate $Property in ConfigBlock for Resource $Resource"
-        Write-Output "This is what was found:`n"
-        $dscresource.ConfigBlock
-        return
+# Import private functions
+$PrivateFunctions = Get-ChildItem -Path "$ModuleRoot\Private\*.ps1" -ErrorAction SilentlyContinue
+foreach ($Function in $PrivateFunctions) {
+    try {
+        Write-Verbose "Importing private function: $($Function.BaseName)"
+        . $Function.FullName
     }
-    else
-    {
-        $newConfigBlock = $dscresource.ConfigBlock.Replace("$Property;","$Property -Split `"$Deliminator`";")
-        Update-ConfigBlockData -ConfigBlock $newConfigBlock -Resource $dscresource.ResourceName
+    catch {
+        Write-Error "Failed to import private function '$($Function.BaseName)': $($_.Exception.Message)"
     }
 }
 
-# Creates the table required for DSC Resource metadata, probably not needed unless creating new DB.
+# Import public functions
+$PublicFunctions = Get-ChildItem -Path "$ModuleRoot\Public\*.ps1" -ErrorAction SilentlyContinue
+$ExportedFunctions = @()
 
-function New-DBTableForDSCMetadata
+foreach ($Function in $PublicFunctions) {
+    try {
+        Write-Verbose "Importing public function: $($Function.BaseName)"
+        . $Function.FullName
+        $ExportedFunctions += $Function.BaseName
+    }
+    catch {
+        Write-Error "Failed to import public function '$($Function.BaseName)': $($_.Exception.Message)"
+    }
+}
+
+# Export public functions
+if ($ExportedFunctions.Count -gt 0) {
+    Export-ModuleMember -Function $ExportedFunctions
+    Write-Verbose "Exported $($ExportedFunctions.Count) public functions"
+}
+
+# Export public functions
+if ($ExportedFunctions.Count -gt 0) {
+    Export-ModuleMember -Function $ExportedFunctions
+    Write-Verbose "Exported $($ExportedFunctions.Count) public functions"
+}
+
+# Module initialization
+Write-Verbose "DSCManagement module loaded successfully"
+Write-Verbose "Available functions: $($ExportedFunctions -join ', ')"
+
+# Validate configuration on module load
+try {
+    $null = Get-DscModuleConfig
+    Write-Verbose "Module configuration loaded successfully"
+}
+catch {
+    Write-Warning "Module configuration could not be loaded: $($_.Exception.Message)"
+    Write-Warning "Some functions may not work properly without valid configuration"
+}
 {
     [CmdletBinding()]
     param (
